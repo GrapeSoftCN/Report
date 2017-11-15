@@ -6,6 +6,8 @@ import org.json.simple.JSONObject;
 import JGrapeSystem.rMsg;
 import Model.CommonModel;
 import apps.appsProxy;
+import authority.plvDef.UserMode;
+import authority.plvDef.plvType;
 import interfaceModel.GrapeDBSpecField;
 import interfaceModel.GrapeTreeDBModel;
 import json.JSONHelper;
@@ -24,6 +26,7 @@ public class Reason {
     private session se;
     private JSONObject userInfo = null;
     private String currentWeb = null;
+    private Integer userType = null;
 
     public Reason() {
         model = new CommonModel();
@@ -33,11 +36,13 @@ public class Reason {
         gDbSpecField.importDescription(appsProxy.tableConfig("Reason"));
         reason.descriptionModel(gDbSpecField);
         reason.bindApp();
+        reason.enableCheck();//开启权限检查
 
         se = new session();
         userInfo = se.getDatas();
         if (userInfo != null && userInfo.size() != 0) {
             currentWeb = userInfo.getString("currentWeb"); // 当前站点id
+            userType =userInfo.getInt("userType");//当前用户身份
         }
     }
 
@@ -57,10 +62,16 @@ public class Reason {
             return typeInfo;
         }
         JSONObject object = JSONObject.toJSON(typeInfo);
+        JSONObject rMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 100);//设置默认查询权限
+    	JSONObject uMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 200);
+    	JSONObject dMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 300);
+    	object.put("rMode", rMode.toJSONString()); //添加默认查看权限
+    	object.put("uMode", uMode.toJSONString()); //添加默认修改权限
+    	object.put("dMode", dMode.toJSONString()); //添加默认删除权限
         if (object != null && object.size() > 0) {
             object.put("wbid", currentWeb);
             object.put("count", 0);
-            info = reason.data(object).autoComplete().insertOnce();
+            info = reason.data(object).autoComplete().insertEx();
             obj = (info != null) ? findById(info.toString()) : new JSONObject();
         }
         return (obj != null && obj.size() > 0) ? rMsg.netMSG(0, obj) : result;
@@ -74,7 +85,7 @@ public class Reason {
      * @return
      */
     public String UpdateReson(String id, String typeInfo) {
-        int code = 99;
+        boolean objects =false;
         String result = rMsg.netMSG(100, "修改失败");
         typeInfo = CheckParam(typeInfo);
         if (typeInfo.contains("errorcode")) {
@@ -82,9 +93,9 @@ public class Reason {
         }
         JSONObject object = JSONObject.toJSON(typeInfo);
         if (object != null && object.size() > 0) {
-            code = reason.eq("_id", id).data(object).update() != null ? 0 : 99;
+        	objects = reason.eq("_id", id).data(object).updateEx();
         }
-        return code == 0 ? rMsg.netMSG(0, "修改成功") : result;
+        return result = objects  ? rMsg.netMSG(0, "修改成功") : result;
     }
 
     /**
@@ -138,7 +149,10 @@ public class Reason {
                 return rMsg.netPAGE(ids, pageSize, total, new JSONArray());
             }
         }
-        reason.eq("wbid", currentWeb);
+        //判断当前用户身份：系统管理员，网站管理员
+    	if (UserMode.root>userType && userType>= UserMode.admin) { //判断是否是网站管理员
+    		reason.eq("wbid", currentWeb);
+		}
         JSONArray array = reason.dirty().page(ids, pageSize);
         total = reason.count();
         return rMsg.netPAGE(ids, pageSize, total, (array != null && array.size() > 0) ? array : new JSONArray());

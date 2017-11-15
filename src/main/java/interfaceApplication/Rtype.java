@@ -6,6 +6,8 @@ import org.json.simple.JSONObject;
 import JGrapeSystem.rMsg;
 import Model.CommonModel;
 import apps.appsProxy;
+import authority.plvDef.UserMode;
+import authority.plvDef.plvType;
 import interfaceModel.GrapeDBSpecField;
 import interfaceModel.GrapeTreeDBModel;
 import json.JSONHelper;
@@ -24,6 +26,7 @@ public class Rtype {
     private session se;
     private JSONObject userInfo = null;
     private String currentWeb = null;
+    private Integer userType = null;
 
     public Rtype() {
         model = new CommonModel();
@@ -33,11 +36,14 @@ public class Rtype {
         gDbSpecField.importDescription(appsProxy.tableConfig("Rtype"));
         rType.descriptionModel(gDbSpecField);
         rType.bindApp();
+        rType.enableCheck();//开启权限检查
 
         se = new session();
         userInfo = se.getDatas();
         if (userInfo != null && userInfo.size() != 0) {
             currentWeb = userInfo.getString("currentWeb"); // 当前站点id
+            userType =userInfo.getInt("userType");//当前用户身份
+            
         }
     }
 
@@ -57,6 +63,12 @@ public class Rtype {
             return typeInfo;
         }
         JSONObject object = JSONObject.toJSON(typeInfo);
+        JSONObject rMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 100);//设置默认查询权限
+    	JSONObject uMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 200);
+    	JSONObject dMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 300);
+    	object.put("rMode", rMode.toJSONString()); //添加默认查看权限
+    	object.put("uMode", uMode.toJSONString()); //添加默认修改权限
+    	object.put("dMode", dMode.toJSONString()); //添加默认删除权限
         if (object != null && object.size() > 0) {
             object.put("wbid", currentWeb);
             info = rType.data(object).insertOnce();
@@ -143,7 +155,10 @@ public class Rtype {
                 return rMsg.netPAGE(ids, pageSize, total, new JSONArray());
             }
         }
-        rType.eq("wbid", currentWeb);
+        //判断当前用户身份：系统管理员，网站管理员
+    	if (UserMode.root>userType && userType>= UserMode.admin) { //判断是否是网站管理员
+    		rType.eq("wbid", currentWeb);
+		}
         JSONArray array = rType.dirty().page(ids, pageSize);
         total = rType.count();
         return rMsg.netPAGE(ids, pageSize, total, (array != null && array.size() > 0) ? array : new JSONArray());

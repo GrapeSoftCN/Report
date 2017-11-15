@@ -176,6 +176,7 @@ public class ReportTask {
 		}
 		object.put("time", TimeHelper.nowMillis());
 		object.put("state", 0); // 不接收短信
+		
 		obj = db.data(object).autoComplete().insertOnce();
 		return rMsg.netMSG(true, (String) obj);
 	}
@@ -219,6 +220,7 @@ public class ReportTask {
 		if (checkParam(object)) {
 			return rMsg.netMSG(3, "该管理员信息已存在");
 		}
+		db.enableCheck();//开启权限检查
 		object = db.eq(pkString, id).data(object).update();
 		return rMsg.netState(object != null);
 	}
@@ -240,6 +242,7 @@ public class ReportTask {
 					db.or().eq(pkString, id[i]);
 				}
 			}
+			db.enableCheck();//开启权限检查
 			rl = rb ? db.deleteAll() : -1;
 		} else {
 			rb = false;

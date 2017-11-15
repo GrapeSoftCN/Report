@@ -9,6 +9,7 @@ import org.json.simple.JSONObject;
 import JGrapeSystem.rMsg;
 import Model.CommonModel;
 import apps.appsProxy;
+import authority.plvDef.plvType;
 import cache.CacheHelper;
 import checkCode.checkCodeHelper;
 import file.fileHelper;
@@ -32,6 +33,7 @@ public class Report {
     private JSONObject userInfo = null;
     private String currentWeb = null;
     private String appid = null;
+    private Integer userType = null;
 
     public Report() {
         appid = appsProxy.appidString();
@@ -43,11 +45,13 @@ public class Report {
         gDbSpecField.importDescription(appsProxy.tableConfig("Report"));
         report.descriptionModel(gDbSpecField);
         report.bindApp();
+        report.enableCheck();//开启权限检查
 
         se = new session();
         userInfo = se.getDatas();
         if (userInfo != null && userInfo.size() != 0) {
             currentWeb = userInfo.getString("currentWeb"); // 当前站点id
+            userType =userInfo.getInt("userType");//当前用户身份
         }
     }
 
@@ -482,6 +486,12 @@ public class Report {
         String tip = null;
         if (info != null) {
             try {
+            	JSONObject rMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 100);//设置默认查询权限
+            	JSONObject uMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 200);
+            	JSONObject dMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 300);
+            	info.put("rMode", rMode.toJSONString()); //添加默认查看权限
+            	info.put("uMode", uMode.toJSONString()); //添加默认修改权限
+            	info.put("dMode", dMode.toJSONString()); //添加默认删除权限
                 tip = report.data(info).insertOnce().toString();
             } catch (Exception e) {
                 nlogger.logout(e);

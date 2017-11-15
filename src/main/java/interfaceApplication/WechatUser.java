@@ -4,6 +4,7 @@ import org.json.simple.JSONObject;
 
 import JGrapeSystem.rMsg;
 import apps.appsProxy;
+import authority.plvDef.plvType;
 import cache.CacheHelper;
 import check.checkHelper;
 import interfaceModel.GrapeDBSpecField;
@@ -24,6 +25,7 @@ public class WechatUser {
         gDbSpecField.importDescription(appsProxy.tableConfig("WechatUser"));
         wechatUser.descriptionModel(gDbSpecField);
         wechatUser.bindApp();
+        wechatUser.enableCheck();//开启权限检查
     }
 
     /**
@@ -33,7 +35,7 @@ public class WechatUser {
      * @return
      */
     public String insertOpenId(String info) {
-        int code = 99;
+        Object code = 99;
         String result = rMsg.netMSG(100, "实名认证失败");
         CacheHelper helper = new CacheHelper();
         info = CheckParam(info);
@@ -41,6 +43,12 @@ public class WechatUser {
             return info;
         }
         JSONObject object = JSONObject.toJSON(info);
+        JSONObject rMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 100);//设置默认查询权限
+    	JSONObject uMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 200);
+    	JSONObject dMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 300);
+    	object.put("rMode", rMode.toJSONString()); //添加默认查看权限
+    	object.put("uMode", uMode.toJSONString()); //添加默认修改权限
+    	object.put("dMode", dMode.toJSONString()); //添加默认删除权限
         if (object != null && object.size() > 0) {
             try {
                 String openid = "";
@@ -49,7 +57,7 @@ public class WechatUser {
                 }
                 JSONObject users = FindOpenId(openid);
                 if (users == null) {
-                    code = wechatUser.data(object).insertOnce() != null ? 0 : 99;
+                    code = wechatUser.data(object).insertEx();
                 }
 
                 if (helper.get(openid + "Info") != null) {
@@ -61,7 +69,7 @@ public class WechatUser {
                 code = 99;
             }
         }
-        return code == 0 ? rMsg.netMSG(0, "实名认证成功") : result;
+        return code != null ? rMsg.netMSG(0, "实名认证成功") : result;
     }
 
     /**
@@ -72,7 +80,7 @@ public class WechatUser {
      */
     @SuppressWarnings("unchecked")
     protected String UpdateInfo(String openid, String info) {
-        int code = 99;
+        Object code = 99;
         String result = rMsg.netMSG(100, "更新用户信息失败");
         try {
             JSONObject object = JSONObject.toJSON(info);
@@ -80,13 +88,13 @@ public class WechatUser {
             headimg = codec.DecodeHtmlTag(headimg);
             object.put("headimgurl", codec.decodebase64(headimg));
             if (object != null && object.size() > 0) {
-                code = wechatUser.eq("openid", openid).data(object).update() != null ? 0 : 99;
+                code = wechatUser.eq("openid", openid).data(object).updateEx();
             }
         } catch (Exception e) {
             nlogger.logout(e);
             code = 99;
         }
-        return code == 0 ? rMsg.netMSG(0, "修改成功") : result;
+        return code != null ? rMsg.netMSG(0, "修改成功") : result;
     }
 
     /**
