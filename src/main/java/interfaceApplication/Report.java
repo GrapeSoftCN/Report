@@ -6,9 +6,12 @@ import java.io.FileOutputStream;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import com.mongodb.binding.WriteBinding;
+
 import JGrapeSystem.rMsg;
 import Model.CommonModel;
 import apps.appsProxy;
+import authority.plvDef.UserMode;
 import authority.plvDef.plvType;
 import cache.CacheHelper;
 import checkCode.checkCodeHelper;
@@ -32,8 +35,9 @@ public class Report {
     private session se;
     private JSONObject userInfo = null;
     private String currentWeb = null;
+    private Integer userType = 0;
+    private String userid = null;
     private String appid = null;
-    private Integer userType = null;
 
     public Report() {
         appid = appsProxy.appidString();
@@ -45,14 +49,79 @@ public class Report {
         gDbSpecField.importDescription(appsProxy.tableConfig("Report"));
         report.descriptionModel(gDbSpecField);
         report.bindApp();
-        report.enableCheck();//开启权限检查
+        // report.enableCheck();//开启权限检查
 
         se = new session();
         userInfo = se.getDatas();
         if (userInfo != null && userInfo.size() != 0) {
             currentWeb = userInfo.getString("currentWeb"); // 当前站点id
-            userType =userInfo.getInt("userType");//当前用户身份
+            userid = userInfo.getMongoID("_id");
+            userType = userInfo.getInt("userType");
+            System.out.println(userType);
         }
+    }
+
+    /**
+     * 查询个人举报件
+     * 
+     * @param idx
+     * @param pageSize
+     * @return
+     */
+    public String showByUser(int idx, int pageSize) {
+        long total = 0;
+        JSONArray array = null;
+        try {
+            if (!StringHelper.InvaildString(userid)) {
+                return rMsg.netMSG(1, "当前登录信息失效，无法查看信息");
+            }
+            report.eq("userid", userid);
+            array = report.dirty().field("_id,content,time,handletime,completetime,refusetime,state,reason").dirty().desc("time").page(idx, pageSize);
+            total = report.count();
+            report.clear();
+        } catch (Exception e) {
+            nlogger.logout(e);
+            array = null;
+        }
+        return rMsg.netPAGE(idx, pageSize, total, (array != null && array.size() > 0) ? model.dencode(array) : new JSONArray());
+    }
+
+    // 网页端新增举报
+    @SuppressWarnings("unchecked")
+    public String AddReportWeb(String info) {
+        Object rs = null;
+        String wbid = currentWeb;
+        long  currentTime = TimeHelper.nowMillis();
+        long time = currentTime;
+        String result = rMsg.netMSG(100, "新增举报件失败");
+        try {
+            JSONObject object = JSONObject.toJSON(info);
+            if (object == null || object.size() <= 0) {
+                return rMsg.netMSG(1, "无效参数");
+            }
+            String content = object.getString("content");
+            content = codec.DecodeHtmlTag(content);
+            object.put("content", content);
+            if (object.containsKey("wbid")) {
+                wbid = object.getString("wbid");
+            }
+            object.put("circulation", wbid);
+            if (object.containsKey("time")) {
+                time = object.getLong(time);
+                if (time == 0 || time > currentTime) {
+                    time = currentTime;
+                }
+            }
+            object.put("time", time);
+            rs = report.data(object).autoComplete().insertOnce();
+            model.setKafka(result, 1, 0);
+//            appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + rs + "/" + appid + "/int:2/int:1/int:0");
+            result = rs != null ? rMsg.netMSG(0, "提交举报信息成功") : result;
+        } catch (Exception e) {
+            nlogger.logout(e);
+            result = rMsg.netMSG(100, "提交举报信息失败");
+        }
+        return result;
     }
 
     /**
@@ -100,7 +169,7 @@ public class Report {
     public String resume(String info) {
         String openid = "";
         String result = rMsg.netMSG(100, "新增举报件失败");
-        if (!StringHelper.InvaildString(info)) {
+        if (StringHelper.InvaildString(info)) {
             JSONObject object = JSONObject.toJSON(info);
             if (object != null && object.size() > 0) {
                 openid = object.getString("userid");
@@ -119,6 +188,17 @@ public class Report {
         return result;
     }
 
+    // // 修改
+    // public String UpdateReport(String id, String typeInfo) {
+    // if (!StringHelper.InvaildString(id)) {
+    // return rMsg.netMSG(1, "无效举报件id");
+    // }
+    // JSONObject object = JSONObject.toJSON(typeInfo);
+    // if (object == null || object.size() <= 0) {
+    // return rMsg.netMSG(1, "无效举报件id");
+    // }
+    // }
+
     /**
      * 举报件处理完成
      * 
@@ -128,12 +208,16 @@ public class Report {
      */
     public String CompleteReport(String id, String reson) {
         int code = 99;
-        if (!StringHelper.InvaildString(reson)) {
-            JSONObject object = JSONObject.toJSON(reson);
-            if (object != null && object.size() > 0) {
-                code = OperaReport(id, object, 2);
+        JSONObject object = new JSONObject();
+        if (StringHelper.InvaildString(reson)) {
+            object = JSONObject.toJSON(reson);
+            if (object == null || object.size() <= 0) {
+                return rMsg.netMSG(1, "无效参数");
             }
         }
+        code = OperaReport(id, object, 2);
+        model.setKafka(id, 3, 2);
+//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:3/int:2");
         return code == 0 ? rMsg.netMSG(0, "") : rMsg.netMSG(100, "");
     }
 
@@ -146,12 +230,18 @@ public class Report {
      */
     public String RefuseReport(String id, String reson) {
         int code = 99;
-        if (!StringHelper.InvaildString(reson)) {
-            JSONObject object = JSONObject.toJSON(reson);
-            if (object != null && object.size() > 0) {
-                code = OperaReport(id, object, 3);
+        JSONObject object = new JSONObject();
+        if (StringHelper.InvaildString(reson)) {
+            object = JSONObject.toJSON(reson);
+            if (object == null || object.size() <= 0) {
+                if (object == null || object.size() < 0) {
+                    return rMsg.netMSG(1, "无效参数");
+                }
             }
         }
+        code = OperaReport(id, object, 3);
+        model.setKafka(id, 3, 3);
+//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:3/int:3");
         return code == 0 ? rMsg.netMSG(0, "") : rMsg.netMSG(100, "");
     }
 
@@ -164,12 +254,16 @@ public class Report {
      */
     public String HandleReport(String id, String typeInfo) {
         int code = 99;
-        if (!StringHelper.InvaildString(typeInfo)) {
-            JSONObject object = JSONObject.toJSON(typeInfo);
-            if (object != null && object.size() > 0) {
-                code = OperaReport(id, object, 1);
+        JSONObject object = new JSONObject();
+        if (StringHelper.InvaildString(typeInfo)) {
+            object = JSONObject.toJSON(typeInfo);
+            if (object == null || object.size() < 0) {
+                return rMsg.netMSG(1, "无效参数");
             }
         }
+        code = OperaReport(id, object, 1);
+        model.setKafka(id, 3, 1);
+//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:3/int:1");
         return code == 0 ? rMsg.netMSG(0, "") : rMsg.netMSG(100, "");
     }
 
@@ -184,30 +278,33 @@ public class Report {
     @SuppressWarnings("unchecked")
     private int OperaReport(String id, JSONObject object, int type) {
         int code = 99;
-        switch (type) {
-        case 1: // 正在处理
-            object.put("handletime", TimeHelper.nowMillis());
-            object.put("state", 1);
-            break;
+        if (object != null && object.size() > 0) {
+            switch (type) {
+            case 1: // 正在处理
+                object.put("handletime", TimeHelper.nowMillis());
+                object.put("state", 1);
+                break;
 
-        case 2: // 处理完成
-            object.put("completetime", TimeHelper.nowMillis());
-            object.put("state", 2);
-            break;
-        case 3: // 拒绝处理
-            object.put("completetime", TimeHelper.nowMillis());
-            object.put("state", 3);
-            object.put("isdelete", 1);
-            break;
+            case 2: // 处理完成
+                object.put("completetime", TimeHelper.nowMillis());
+                object.put("state", 2);
+                break;
+            case 3: // 拒绝处理
+                object.put("completetime", TimeHelper.nowMillis());
+                object.put("state", 3);
+                object.put("isdelete", 1);
+                break;
+            }
+            code = report.eq("_id", id).data(object).update() != null ? 0 : 99;
+
         }
-        code = report.eq("_id", id).data(object).update() != null ? 0 : 99;
         return code;
     }
 
     /* 前台分页显示 */
     public String PageFront(String wbid, int idx, int pageSize, String info) {
         long total = 0;
-        if (!StringHelper.InvaildString(info)) {
+        if (StringHelper.InvaildString(info)) {
             JSONArray condArray = model.buildCond(info);
             if (condArray != null && condArray.size() > 0) {
                 report.where(condArray);
@@ -233,10 +330,11 @@ public class Report {
 
     public String PageBy(int idx, int pageSize, String info) {
         long total = 0;
-        if (StringHelper.InvaildString(currentWeb)) {
-            return rMsg.netPAGE(idx, pageSize, total, new JSONArray());
+        if (!StringHelper.InvaildString(currentWeb)) {
+            return rMsg.netMSG(1, "当前登录已失效，无法查看举报信息");
+//            return rMsg.netPAGE(idx, pageSize, total, new JSONArray());
         }
-        if (true) { // 判断是否为网站管理员
+        if (UserMode.root > userType && userType >= UserMode.admin) { // 判断是否是网站管理员
             String[] webtree = getAllWeb();
             if (webtree != null && !webtree.equals("")) {
                 report.or();
@@ -245,9 +343,9 @@ public class Report {
                 }
             }
             report.and();
-            report.eq("circulation", currentWeb);
+//            report.eq("circulation", currentWeb);
         }
-        if (!StringHelper.InvaildString(info)) {
+        if (StringHelper.InvaildString(info)) {
             JSONArray condArray = model.buildCond(info);
             if (condArray != null && condArray.size() > 0) {
                 report.where(condArray);
@@ -255,7 +353,7 @@ public class Report {
                 return rMsg.netPAGE(idx, pageSize, total, new JSONArray());
             }
         }
-        JSONArray array = report.dirty().page(idx, pageSize);
+        JSONArray array = report.dirty().desc("time").page(idx, pageSize);
         total = report.count();
         array = model.getImage(model.dencode(array));
         return rMsg.netPAGE(idx, pageSize, total, (array != null && array.size() > 0) ? array : new JSONArray());
@@ -263,20 +361,77 @@ public class Report {
 
     // 尚未被处理的事件总数
     public String Count() {
-
         long count = 0;
-        // 系统管理员统计所有的未处理的举报件信息
-        count = report.eq("state", 0).count();
-        // 网站管理员
-        if (!StringHelper.InvaildString(currentWeb)) {
-            String[] webtree = getAllWeb();
-            if (webtree != null && !webtree.equals("")) {
-                for (String string : webtree) {
-                    count += report.eq("wbid", string).eq("state", 0).count();
+        // 判断当前用户身份：系统管理员，网站管理员
+        userType = 1000;
+        if (UserMode.root > userType && userType >= UserMode.admin) { // 判断是否是网站管理员
+            // 网站管理员
+            if (StringHelper.InvaildString(currentWeb)) {
+                String[] webtree = getAllWeb();
+                if (webtree != null && !webtree.equals("")) {
+                    for (String string : webtree) {
+                        count += report.eq("wbid", string).eq("state", 0).count();
+                    }
                 }
             }
+        } else if (userType >= UserMode.root) {
+            // 系统管理员统计所有的未处理的举报件信息
+            count = report.eq("state", 0).count();
         }
         return rMsg.netMSG(0, String.valueOf(count));
+    }
+
+    /**
+     * 举报信息流转，只能流转到下级，且由一级流转至二级
+     * 
+     * @project GrapeReport
+     * @package interfaceApplication
+     * @file Report.java
+     * 
+     * @param rid
+     *            当前举报件id
+     * @param targetWeb
+     *            流转目标网站id
+     * @return
+     *
+     */
+    @SuppressWarnings("unchecked")
+    public String circulationReport(String rid, String targetWeb) {
+        String currentId = "";
+        int code = 99;
+        String result = rMsg.netMSG(100, "当前站点不支持转发");
+        JSONObject obj = new JSONObject();
+        obj.put("circulation", targetWeb);
+        if (StringHelper.InvaildString(currentWeb)) {
+            // 判断当前网站是否为一级网站
+            if (IsFirstWeb(currentId)) {
+                code = report.eq("_id", rid).data(obj).update() != null ? 0 : 99;
+            }
+            result = code == 0 ? rMsg.netMSG(0, "已经流转至其他用户") : result;
+        } else {
+            result = rMsg.netMSG(99, "当前用户信息已失效，请重新登录");
+        }
+        return result;
+    }
+
+    /**
+     * 判断是否为一级网站
+     * 
+     * @project GrapeReport
+     * @package interfaceApplication
+     * @file Report.java
+     * 
+     * @param currentId
+     * @return
+     *
+     */
+    private boolean IsFirstWeb(String currentId) {
+        JSONObject tempobj = null;
+        String temp = (String) appsProxy.proxyCall("/GrapeWebInfo/WebInfo/isFirstWeb/" + currentWeb);
+        if (temp != null && temp.length() > 0) {
+            tempobj = JSONObject.toJSON(temp);
+        }
+        return (tempobj != null && tempobj.size() > 0);
     }
 
     /**
@@ -337,8 +492,6 @@ public class Report {
             }
         }
         array = report.field("userid,Wrongdoer,content,slevel,mode,state,time,handletime,refusetime,completetime,attr").select();
-        // array = model.getImg(array);
-        // array = cleanUpData(array);
         return (array != null && array.size() != 0) ? array.toJSONString() : null;
     }
 
@@ -349,8 +502,8 @@ public class Report {
      */
     private String[] getAllWeb() {
         String[] webtree = null;
-        if (!StringHelper.InvaildString(currentWeb)) {
-            String webTree = (String) appsProxy.proxyCall("/GrapeWebInfo/WebInfo/getChildwebs/" + currentWeb);
+        if (StringHelper.InvaildString(currentWeb)) {
+            String webTree = (String) appsProxy.proxyCall("/GrapeWebInfo/WebInfo/getWebTree/" + currentWeb);
             webtree = webTree.split(",");
         }
         return webtree;
@@ -458,8 +611,15 @@ public class Report {
     private String Anonymous(JSONObject object) {
         String result = rMsg.netMSG(100, "新增举报件失败");
         String info = insert(object);
-        JSONObject obj = SearchById(info);
+        JSONObject obj = Search(info);
         return (obj != null && obj.size() > 0) ? rMsg.netMSG(0, obj) : result;
+    }
+
+    public String SearchById(String id) {
+        JSONObject object = Search(id);
+        model.setKafka(id, 2, 0);
+//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:2/int:0");
+        return rMsg.netMSG(true, model.getImage(model.dencode(object)));
     }
 
     /**
@@ -468,12 +628,26 @@ public class Report {
      * @param id
      * @return
      */
-    private JSONObject SearchById(String id) {
+    private JSONObject Search(String id) {
         JSONObject object = null;
-        if (!StringHelper.InvaildString(id)) {
+        if (StringHelper.InvaildString(id)) {
             object = report.eq("_id", id).find();
         }
         return object;
+    }
+
+    /**
+     * 统计待处理举报
+     * @return
+     */
+    public String CountReport() {
+        String wbid = "";
+        long count = 0;
+        report.eq("state", 0);
+        if (StringHelper.InvaildString(currentWeb)) {
+            count = report.eq("wbid", wbid).count();
+        }
+        return rMsg.netMSG(0, String.valueOf(count));
     }
 
     /**
@@ -482,16 +656,17 @@ public class Report {
      * @param info
      * @return
      */
+    @SuppressWarnings("unchecked")
     private String insert(JSONObject info) {
         String tip = null;
         if (info != null) {
             try {
-            	JSONObject rMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 100);//设置默认查询权限
-            	JSONObject uMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 200);
-            	JSONObject dMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 300);
-            	info.put("rMode", rMode.toJSONString()); //添加默认查看权限
-            	info.put("uMode", uMode.toJSONString()); //添加默认修改权限
-            	info.put("dMode", dMode.toJSONString()); //添加默认删除权限
+                JSONObject rMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 100);// 设置默认查询权限
+                JSONObject uMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 200);
+                JSONObject dMode = new JSONObject(plvType.chkType, plvType.powerVal).puts(plvType.chkVal, 300);
+                info.put("rMode", rMode.toJSONString()); // 添加默认查看权限
+                info.put("uMode", uMode.toJSONString()); // 添加默认修改权限
+                info.put("dMode", dMode.toJSONString()); // 添加默认删除权限
                 tip = report.data(info).insertOnce().toString();
             } catch (Exception e) {
                 nlogger.logout(e);
@@ -509,9 +684,8 @@ public class Report {
      */
     @SuppressWarnings("unchecked")
     private String checkParam(String info) {
-        String userid = null;
         String result = rMsg.netMSG(1, "参数异常");
-        if (!StringHelper.InvaildString(info)) {
+        if (StringHelper.InvaildString(info)) {
             JSONObject object = JSONObject.toJSON(info);
             if (object != null && object.size() > 0) {
                 if (object.containsKey("content")) {
@@ -521,15 +695,12 @@ public class Report {
                             return rMsg.netMSG(2, "举报内容超过指定字数");
                         }
                         content = codec.DecodeHtmlTag(content);
-                        content = codec.decodebase64(content);
-                        object.put("content", codec.encodebase64(content));
+                        // content = codec.decodebase64(content);
+                        // // object.put("content",
+                        // codec.encodebase64(content));
+                        // object.escapeHtmlPut("content", content);
+                        object.put("content", content);
                     }
-                }
-                if (object.containsKey("userid")) {
-                    userid = object.getString("userid");
-                }
-                if (StringHelper.InvaildString(userid)) {
-                    return rMsg.netMSG(3, "获取用户信息异常，请稍候再试");
                 }
                 result = object.toJSONString();
             }

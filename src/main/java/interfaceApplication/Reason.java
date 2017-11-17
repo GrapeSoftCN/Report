@@ -26,7 +26,7 @@ public class Reason {
     private session se;
     private JSONObject userInfo = null;
     private String currentWeb = null;
-    private Integer userType = null;
+    private Integer userType = 0;
 
     public Reason() {
         model = new CommonModel();
@@ -36,7 +36,7 @@ public class Reason {
         gDbSpecField.importDescription(appsProxy.tableConfig("Reason"));
         reason.descriptionModel(gDbSpecField);
         reason.bindApp();
-        reason.enableCheck();//开启权限检查
+//        reason.enableCheck();//开启权限检查
 
         se = new session();
         userInfo = se.getDatas();
@@ -107,7 +107,7 @@ public class Reason {
         long code = 0;
         String[] value = null;
         String result = rMsg.netMSG(100, "删除失败");
-        if (!StringHelper.InvaildString(ids)) {
+        if (StringHelper.InvaildString(ids)) {
             value = ids.split(",");
         }
         if (value != null) {
@@ -141,7 +141,7 @@ public class Reason {
      */
     public String PageByReson(int ids, int pageSize, String info) {
         long total = 0;
-        if (!StringHelper.InvaildString(info)) {
+        if (StringHelper.InvaildString(info)) {
             JSONArray condArray = model.buildCond(info);
             if (condArray != null && condArray.size() > 0) {
                 reason.where(condArray);
@@ -149,7 +149,7 @@ public class Reason {
                 return rMsg.netPAGE(ids, pageSize, total, new JSONArray());
             }
         }
-        //判断当前用户身份：系统管理员，网站管理员
+//        判断当前用户身份：系统管理员，网站管理员
     	if (UserMode.root>userType && userType>= UserMode.admin) { //判断是否是网站管理员
     		reason.eq("wbid", currentWeb);
 		}
@@ -223,7 +223,7 @@ public class Reason {
      */
     private JSONObject findById(String tid) {
         JSONObject object = null;
-        if (!StringHelper.InvaildString(tid)) {
+        if (StringHelper.InvaildString(tid)) {
             object = reason.eq("_id", "tid").find();
         }
         return object;

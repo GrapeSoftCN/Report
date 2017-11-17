@@ -8,11 +8,47 @@ import org.json.simple.JSONObject;
 
 import apps.appsProxy;
 import database.dbFilter;
+import httpClient.request;
 import nlogger.nlogger;
 import security.codec;
 import string.StringHelper;
 
 public class CommonModel {
+
+    /**
+     * 发送数据到kafka
+     * 
+     * @param id
+     * @param mode
+     * @param newstate
+     */
+    public void setKafka(String id, int mode, int newstate) {
+        String APIHost = getconfig("APIHost");
+        String APIAppid = getconfig("appid");
+        if (!APIHost.equals("") && !APIAppid.equals("")) {
+            request.Get(APIHost + "/" + APIAppid + "/sendServer/ShowInfo/getKafkaData/" + id + "/" + appsProxy.appidString() + "/int:1/int:" + mode + "/int:" + newstate);
+        }
+    }
+
+    /**
+     * 获取配置信息
+     * 
+     * @param key
+     * @return
+     */
+    private String getconfig(String key) {
+        String value = "";
+        try {
+            JSONObject object = JSONObject.toJSON(appsProxy.configValue().getString("other"));
+            if (object != null && object.size() > 0) {
+                value = object.getString(key);
+            }
+        } catch (Exception e) {
+            nlogger.logout(e);
+            value = "";
+        }
+        return value;
+    }
 
     /**
      * 获取微服务配置中的other内容
@@ -41,7 +77,7 @@ public class CommonModel {
     public String getImageUri(String imageURL) {
         int i = 0;
         String dir = getConfigString("weburl");
-        if (!StringHelper.InvaildString(imageURL)) {
+        if (StringHelper.InvaildString(imageURL)) {
             if (imageURL.contains("File//upload")) {
                 i = imageURL.toLowerCase().indexOf("file//upload");
                 imageURL = "\\" + imageURL.substring(i);
@@ -147,9 +183,9 @@ public class CommonModel {
         }
         fid = getFid(array); // 获取文件id
         JSONObject obj = getFileInfo(fid);
-        if (obj!=null && obj.size() > 0) {
+        if (obj != null && obj.size() > 0) {
             for (int i = 0; i < array.size(); i++) {
-                object = (JSONObject)array.get(i);
+                object = (JSONObject) array.get(i);
                 array.set(i, FillFileInfo(obj, object));
             }
         }
@@ -159,57 +195,94 @@ public class CommonModel {
     public JSONObject getImage(JSONObject object) {
         // 获取fid
         String fid = getFid(object);
-        JSONObject obj = getFileInfo(fid);  //获取文件信息
-        if (obj!=null && obj.size() > 0) {
+        JSONObject obj = getFileInfo(fid); // 获取文件信息
+        if (obj != null && obj.size() > 0) {
             object = FillFileInfo(obj, object);
         }
         return object;
     }
 
-    /**
-     * 填充文件信息
-     * @param FileInfo
-     * @param object
-     * @return
-     */
     @SuppressWarnings("unchecked")
-    private JSONObject FillFileInfo(JSONObject FileInfo, JSONObject object) {
-        String attrlist = "", filetype = "", filepath = "";
+    private JSONObject FillFileInfo(JSONObject FileObj,JSONObject object) {
+        String attrlist = "", filetype = "";
+        String[] attr;
         JSONObject FileInfoObj;
-        String[] value = null;
         List<String> imgList = new ArrayList<String>();
         List<String> videoList = new ArrayList<String>();
-        if (object != null && object.size() > 0) {
-            if (object.containsKey("attr")) {
-                value = object.getString("attr").split(",");
-            }
-            if (FileInfo != null && FileInfo.size() > 0) {
-                for (String attrid : value) {
-                    FileInfoObj = FileInfo.getJson(attrid);
-                    if (FileInfoObj != null && FileInfoObj.size() > 0) {
-                        if (FileInfoObj.containsKey("filepath")) {
-                            filepath = FileInfoObj.getString("filepath");
-                        }
-                        if (FileInfoObj.containsKey("filetype")) {
-                            filetype = FileInfoObj.getString("filetype");
-                        }
+        List<String> fileList = new ArrayList<String>();
+        attr = object.getString("attr").split(",");
+        int attrlength = attr.length;
+        if (attrlength != 0 && !attr[0].equals("") || attrlength > 1) {
+            for (int j = 0; j < attrlength; j++) {
+                FileInfoObj = (JSONObject) FileObj.get(attr[j]);
+                if (FileInfoObj != null && FileInfoObj.size() != 0) {
+                    attrlist = FileInfoObj.get("filepath").toString();
+                    if (FileInfoObj.containsKey("filetype")) {
+                        filetype = FileInfoObj.getString("filetype");
                     }
-                    if (StringHelper.InvaildString(filepath)) {
-                        attrlist = getConfigString("fileHost") + filepath;
-                    }
-                    if (filetype.equals("1")) { // 图片
-                        imgList.add(attrlist);
-                    }
-                    if (filetype.equals("2")) { // 视频
+                    object.put("attrFile" + j, FileInfoObj);
+                    if ("1".equals(filetype)) {
+                        imgList.add(attrlist);  //视频
+                    }else if ("2".equals(filetype)) {
                         videoList.add(attrlist);
+                    }else {
+                        fileList.add(attrlist);
                     }
                 }
             }
         }
         object.put("image", imgList.size() != 0 ? StringHelper.join(imgList) : "");
         object.put("video", videoList.size() != 0 ? StringHelper.join(videoList) : "");
+        object.put("file", fileList.size() != 0 ? StringHelper.join(fileList) : "");
         return object;
     }
+
+    // /**
+    // * 填充文件信息
+    // * @param FileInfo
+    // * @param object
+    // * @return
+    // */
+    // @SuppressWarnings("unchecked")
+    // private JSONObject FillFileInfo(JSONObject FileInfo, JSONObject object) {
+    // String attrlist = "", filetype = "", filepath = "";
+    // JSONObject FileInfoObj;
+    // String[] value = null;
+    // List<String> imgList = new ArrayList<String>();
+    // List<String> videoList = new ArrayList<String>();
+    // if (object != null && object.size() > 0) {
+    // if (object.containsKey("attr")) {
+    // value = object.getString("attr").split(",");
+    // }
+    // if (FileInfo != null && FileInfo.size() > 0) {
+    // for (String attrid : value) {
+    // FileInfoObj = FileInfo.getJson(attrid);
+    // if (FileInfoObj != null && FileInfoObj.size() > 0) {
+    // if (FileInfoObj.containsKey("filepath")) {
+    // filepath = FileInfoObj.getString("filepath");
+    // }
+    // if (FileInfoObj.containsKey("filetype")) {
+    // filetype = FileInfoObj.getString("filetype");
+    // }
+    // }
+    // if (StringHelper.InvaildString(filepath)) {
+    // attrlist = getConfigString("fileHost") + filepath;
+    // }
+    // if (filetype.equals("1")) { // 图片
+    // imgList.add(attrlist);
+    // }
+    // if (filetype.equals("2")) { // 视频
+    // videoList.add(attrlist);
+    // }
+    // }
+    // }
+    // }
+    // object.put("image", imgList.size() != 0 ? StringHelper.join(imgList) :
+    // "");
+    // object.put("video", videoList.size() != 0 ? StringHelper.join(videoList)
+    // : "");
+    // return object;
+    // }
 
     /**
      * 获取文件id
@@ -254,7 +327,7 @@ public class CommonModel {
     private JSONObject getFileInfo(String fid) {
         String temp = "";
         if (StringHelper.InvaildString(fid)) {
-            temp = appsProxy.proxyCall("/GrapeFile/Files/getFiles/" + fid).toString();
+            temp = appsProxy.proxyCall("/GrapeFile/Files/getFileByID/" + fid).toString();
         }
         return JSONObject.toJSON(temp);
     }

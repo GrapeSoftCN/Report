@@ -113,7 +113,7 @@ public class Rtype {
         long code = 0;
         String[] value = null;
         String result = rMsg.netMSG(100, "删除失败");
-        if (!StringHelper.InvaildString(ids)) {
+        if (StringHelper.InvaildString(ids)) {
             value = ids.split(",");
         }
         if (value != null) {
@@ -147,7 +147,7 @@ public class Rtype {
      */
     public String search(int ids, int pageSize, String info) {
         long total = 0;
-        if (!StringHelper.InvaildString(info)) {
+        if (StringHelper.InvaildString(info)) {
             JSONArray condArray = model.buildCond(info);
             if (condArray != null && condArray.size() > 0) {
                 rType.where(condArray);
@@ -176,7 +176,7 @@ public class Rtype {
         JSONArray array = null;
         JSONObject rObject = new JSONObject(), object;
         String id, typeName;
-        if (!StringHelper.InvaildString(tids)) {
+        if (StringHelper.InvaildString(tids)) {
             value = tids.split(",");
         }
         if (value != null) {
@@ -240,7 +240,7 @@ public class Rtype {
      */
     private JSONObject findById(String tid) {
         JSONObject object = null;
-        if (!StringHelper.InvaildString(tid)) {
+        if (StringHelper.InvaildString(tid)) {
             object = rType.eq("_id", "tid").find();
         }
         return object;
