@@ -91,7 +91,7 @@ public class Report {
     public String AddReportWeb(String info) {
         Object rs = null;
         String wbid = currentWeb;
-        long  currentTime = TimeHelper.nowMillis();
+        long currentTime = TimeHelper.nowMillis();
         long time = currentTime;
         String result = rMsg.netMSG(100, "新增举报件失败");
         try {
@@ -114,9 +114,9 @@ public class Report {
             }
             object.put("time", time);
             rs = report.data(object).autoComplete().insertOnce();
-            model.setKafka(result, 1, 0);
-//            appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + rs + "/" + appid + "/int:2/int:1/int:0");
             result = rs != null ? rMsg.netMSG(0, "提交举报信息成功") : result;
+            // 发送数据到kafka
+            appsProxy.proxyCall("/GrapeSendKafka/SendKafka/sendData2Kafka/" + rs + "/int:2/int:1/int:0");
         } catch (Exception e) {
             nlogger.logout(e);
             result = rMsg.netMSG(100, "提交举报信息失败");
@@ -216,8 +216,11 @@ public class Report {
             }
         }
         code = OperaReport(id, object, 2);
-        model.setKafka(id, 3, 2);
-//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:3/int:2");
+        // 发送数据到kafka
+        appsProxy.proxyCall("/GrapeSendKafka/SendKafka/sendData2Kafka/" + id + "/int:2/int:3/int:3");
+        // model.setKafka(id, 3, 2);
+        // appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" +
+        // appid + "/int:2/int:3/int:2");
         return code == 0 ? rMsg.netMSG(0, "") : rMsg.netMSG(100, "");
     }
 
@@ -240,8 +243,11 @@ public class Report {
             }
         }
         code = OperaReport(id, object, 3);
-        model.setKafka(id, 3, 3);
-//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:3/int:3");
+        // 发送数据到kafka
+        appsProxy.proxyCall("/GrapeSendKafka/SendKafka/sendData2Kafka/" + id + "/int:2/int:3/int:4");
+        // model.setKafka(id, 3, 3);
+        // appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" +
+        // appid + "/int:2/int:3/int:3");
         return code == 0 ? rMsg.netMSG(0, "") : rMsg.netMSG(100, "");
     }
 
@@ -262,8 +268,11 @@ public class Report {
             }
         }
         code = OperaReport(id, object, 1);
-        model.setKafka(id, 3, 1);
-//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:3/int:1");
+        // 发送数据到kafka
+        appsProxy.proxyCall("/GrapeSendKafka/SendKafka/sendData2Kafka/" + id + "/int:2/int:3/int:2");
+        // model.setKafka(id, 3, 1);
+        // appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" +
+        // appid + "/int:2/int:3/int:1");
         return code == 0 ? rMsg.netMSG(0, "") : rMsg.netMSG(100, "");
     }
 
@@ -332,7 +341,7 @@ public class Report {
         long total = 0;
         if (!StringHelper.InvaildString(currentWeb)) {
             return rMsg.netMSG(1, "当前登录已失效，无法查看举报信息");
-//            return rMsg.netPAGE(idx, pageSize, total, new JSONArray());
+            // return rMsg.netPAGE(idx, pageSize, total, new JSONArray());
         }
         if (UserMode.root > userType && userType >= UserMode.admin) { // 判断是否是网站管理员
             String[] webtree = getAllWeb();
@@ -343,7 +352,7 @@ public class Report {
                 }
             }
             report.and();
-//            report.eq("circulation", currentWeb);
+            // report.eq("circulation", currentWeb);
         }
         if (StringHelper.InvaildString(info)) {
             JSONArray condArray = model.buildCond(info);
@@ -617,8 +626,8 @@ public class Report {
 
     public String SearchById(String id) {
         JSONObject object = Search(id);
-        model.setKafka(id, 2, 0);
-//        appsProxy.proxyCall("/sendServer/ShowInfo/getKafkaData/" + id + "/" + appid + "/int:2/int:2/int:0");
+        // 发送数据到kafka
+        appsProxy.proxyCall("/GrapeSendKafka/SendKafka/sendData2Kafka/" + id + "/int:2/int:2/int:0");
         return rMsg.netMSG(true, model.getImage(model.dencode(object)));
     }
 
@@ -638,6 +647,7 @@ public class Report {
 
     /**
      * 统计待处理举报
+     * 
      * @return
      */
     public String CountReport() {
