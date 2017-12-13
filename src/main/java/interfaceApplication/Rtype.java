@@ -36,7 +36,7 @@ public class Rtype {
         gDbSpecField.importDescription(appsProxy.tableConfig("Rtype"));
         rType.descriptionModel(gDbSpecField);
         rType.bindApp();
-        rType.enableCheck();//开启权限检查
+//        rType.enableCheck();//开启权限检查
 
         se = new session();
         userInfo = se.getDatas();
@@ -125,6 +125,17 @@ public class Rtype {
         }
         return code > 0 ? rMsg.netMSG(0, "删除成功") : result;
     }
+//
+//    /**
+//     * 分页
+//     * 
+//     * @param ids
+//     * @param pageSize
+//     * @return
+//     */
+//    public String PageType(int ids, int pageSize) {
+//        return search(ids, pageSize, null);
+//    }
 
     /**
      * 分页
@@ -134,9 +145,11 @@ public class Rtype {
      * @return
      */
     public String PageType(int ids, int pageSize) {
-        return search(ids, pageSize, null);
+    	long total = 0;
+    	JSONArray array = rType.dirty().page(ids, pageSize);
+        total = rType.count();
+        return rMsg.netPAGE(ids, pageSize, total, array);
     }
-
     /**
      * 条件分页
      * 

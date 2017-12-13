@@ -7,14 +7,60 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
 import apps.appsProxy;
+import database.DBHelper;
+import database.db;
 import database.dbFilter;
 import httpClient.request;
 import nlogger.nlogger;
 import security.codec;
 import string.StringHelper;
+import thirdsdk.wechatHelper;
 
 public class CommonModel {
+	private String appid = appsProxy.appidString();
 
+	/**
+	 * 微信帮助类
+	 * 
+	 * @param sdkUserID
+	 * @return
+	 */
+	public wechatHelper getWeChatHelper(int sdkUserID) {
+		wechatHelper wechatHelper = null;
+		if (sdkUserID != 0) {
+			String _appid = getwechatAppid(sdkUserID, "appid");
+			String _appsecret = getwechatAppid(sdkUserID, "appsecret");
+			if (StringHelper.InvaildString(_appid) && StringHelper.InvaildString(_appsecret)) {
+				wechatHelper = new wechatHelper(_appid, _appsecret);
+			}
+		}
+		return wechatHelper;
+	}
+
+	/**
+	 * 获取appid，appsecret
+	 * 
+	 * @param id
+	 * @param key
+	 * @return
+	 */
+	public String getwechatAppid(int id, String key) {
+		DBHelper helper = new DBHelper("localdb", "sdkuser");
+		db db = helper.bind(appid);
+		JSONObject object = db.eq("id", id).field("configString").find();
+		String value = "";
+		if (object != null && object.size() > 0) {
+			if (object.containsKey("configstring")) {
+				object = JSONObject.toJSON(object.getString("configstring"));
+				if (object != null && object.size() > 0) {
+					if (object.containsKey(key)) {
+						value = object.getString(key);
+					}
+				}
+			}
+		}
+		return value;
+	}
     /**
      * 发送数据到kafka
      * 
@@ -237,52 +283,6 @@ public class CommonModel {
         return object;
     }
 
-    // /**
-    // * 填充文件信息
-    // * @param FileInfo
-    // * @param object
-    // * @return
-    // */
-    // @SuppressWarnings("unchecked")
-    // private JSONObject FillFileInfo(JSONObject FileInfo, JSONObject object) {
-    // String attrlist = "", filetype = "", filepath = "";
-    // JSONObject FileInfoObj;
-    // String[] value = null;
-    // List<String> imgList = new ArrayList<String>();
-    // List<String> videoList = new ArrayList<String>();
-    // if (object != null && object.size() > 0) {
-    // if (object.containsKey("attr")) {
-    // value = object.getString("attr").split(",");
-    // }
-    // if (FileInfo != null && FileInfo.size() > 0) {
-    // for (String attrid : value) {
-    // FileInfoObj = FileInfo.getJson(attrid);
-    // if (FileInfoObj != null && FileInfoObj.size() > 0) {
-    // if (FileInfoObj.containsKey("filepath")) {
-    // filepath = FileInfoObj.getString("filepath");
-    // }
-    // if (FileInfoObj.containsKey("filetype")) {
-    // filetype = FileInfoObj.getString("filetype");
-    // }
-    // }
-    // if (StringHelper.InvaildString(filepath)) {
-    // attrlist = getConfigString("fileHost") + filepath;
-    // }
-    // if (filetype.equals("1")) { // 图片
-    // imgList.add(attrlist);
-    // }
-    // if (filetype.equals("2")) { // 视频
-    // videoList.add(attrlist);
-    // }
-    // }
-    // }
-    // }
-    // object.put("image", imgList.size() != 0 ? StringHelper.join(imgList) :
-    // "");
-    // object.put("video", videoList.size() != 0 ? StringHelper.join(videoList)
-    // : "");
-    // return object;
-    // }
 
     /**
      * 获取文件id
@@ -323,7 +323,11 @@ public class CommonModel {
         return fid;
     }
 
-    // 获取文件信息
+    /**
+     * 获取文件信息
+     * @param fid
+     * @return
+     */
     private JSONObject getFileInfo(String fid) {
         String temp = "";
         if (StringHelper.InvaildString(fid)) {

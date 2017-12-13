@@ -113,16 +113,33 @@ public class ReportTask {
 	 * 
 	 * @return
 	 */
+	@SuppressWarnings("unchecked")
 	public void ExecuteTask() {
 		String phoneNo = "", id;
-		long timediff = 0, reportCount = 0;
+		JSONArray array = db.eq("state", 1).scan((rArray) -> {
+			JSONObject obj;
+			String phone;
+			long timediff = 0, neartime = 0;
+			JSONArray _aArray = new JSONArray();
+			if (rArray != null && rArray.size() > 0) {
+				for (Object object : rArray) {
+					obj = (JSONObject) object;
+					timediff = obj.getLong("timediff"); // 发送短信间隔时间
+					neartime = obj.getLong("neartime"); // 最后一次发送短信时间
+					phone = obj.getString("phone"); // 接收短信手机号
+					if (checkHelper.checkMobileNumber(phone) && timediff + neartime <= TimeHelper.nowMillis()) {
+						_aArray.add(obj);
+					}
+				}
+			}
+			return _aArray;
+		}, 50);
 		JSONObject obj;
-		JSONArray array = getTasks();
+		long reportCount = 0,timediff =0;
 		for (Object object : array) {
 			obj = (JSONObject) object;
 			id = obj.getMongoID(pkString);
 			phoneNo = obj.getString("phone");
-			timediff = obj.getLong("timediff");
 			reportCount = new Report().getReportCount(timediff);
 			if (checkHelper.checkMobileNumber(phoneNo) && reportCount > 0) {
 				ruoyaMASDB.sendSMS(phoneNo, "新增举报量为：" + reportCount + "，请及时处理");
@@ -132,31 +149,31 @@ public class ReportTask {
 		nlogger.logout("任务已执行！");
 	}
 
-	/**
-	 * 获取符合条件的任务信息 查询条件 1.手机号正确 2.接收短信状态 state:1 3.间隔时间+上一次执行时间<=当前时间
-	 * 
-	 * @return
-	 */
-	@SuppressWarnings("unchecked")
-	private JSONArray getTasks() {
-		JSONArray _aArray = new JSONArray();
-		JSONObject obj;
-		long timediff = 0, neartime = 0;
-		String phoneNo = "";
-		JSONArray array = db.eq("state", 1).limit(30).select();
-		if (array != null && array.size() > 0) {
-			for (Object object : array) {
-				obj = (JSONObject) object;
-				timediff = obj.getLong("timediff"); // 发送短信间隔时间
-				neartime = obj.getLong("neartime"); // 最后一次发送短信时间
-				phoneNo = obj.getString("phone"); // 接收短信手机号
-				if (checkHelper.checkMobileNumber(phoneNo) && timediff + neartime <= TimeHelper.nowMillis()) {
-					_aArray.add(obj);
-				}
-			}
-		}
-		return _aArray;
-	}
+//	/**
+//	 * 获取符合条件的任务信息 查询条件 1.手机号正确 2.接收短信状态 state:1 3.间隔时间+上一次执行时间<=当前时间
+//	 * 
+//	 * @return
+//	 */
+//	@SuppressWarnings("unchecked")
+//	private JSONArray getTasks() {
+//		JSONArray _aArray = new JSONArray();
+//		JSONObject obj;
+//		long timediff = 0, neartime = 0;
+//		String phoneNo = "";
+//		JSONArray array = db.eq("state", 1).limit(30).select();
+//		if (array != null && array.size() > 0) {
+//			for (Object object : array) {
+//				obj = (JSONObject) object;
+//				timediff = obj.getLong("timediff"); // 发送短信间隔时间
+//				neartime = obj.getLong("neartime"); // 最后一次发送短信时间
+//				phoneNo = obj.getString("phone"); // 接收短信手机号
+//				if (checkHelper.checkMobileNumber(phoneNo) && timediff + neartime <= TimeHelper.nowMillis()) {
+//					_aArray.add(obj);
+//				}
+//			}
+//		}
+//		return _aArray;
+//	}
 
 	/**
 	 * 新增管理员 手机号与时间间隔相同，则不允许重复添加
@@ -176,7 +193,7 @@ public class ReportTask {
 		}
 		object.put("time", TimeHelper.nowMillis());
 		object.put("state", 0); // 不接收短信
-		
+
 		obj = db.data(object).autoComplete().insertOnce();
 		return rMsg.netMSG(true, (String) obj);
 	}
@@ -220,7 +237,7 @@ public class ReportTask {
 		if (checkParam(object)) {
 			return rMsg.netMSG(3, "该管理员信息已存在");
 		}
-		db.enableCheck();//开启权限检查
+		db.enableCheck();// 开启权限检查
 		object = db.eq(pkString, id).data(object).update();
 		return rMsg.netState(object != null);
 	}
@@ -242,7 +259,7 @@ public class ReportTask {
 					db.or().eq(pkString, id[i]);
 				}
 			}
-			db.enableCheck();//开启权限检查
+			db.enableCheck();// 开启权限检查
 			rl = rb ? db.deleteAll() : -1;
 		} else {
 			rb = false;
