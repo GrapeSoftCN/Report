@@ -1,7 +1,7 @@
 package Test;
 
-import httpServer.booter;
-import nlogger.nlogger;
+import common.java.httpServer.booter;
+import common.java.nlogger.nlogger;
 
 public class TestReport {
     public static void main(String[] args) {
